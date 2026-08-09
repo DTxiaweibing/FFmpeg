@@ -84,16 +84,18 @@ jobs:
           rm -rf dist
           mkdir -p dist
           cp -f ffmpeg.exe ffprobe.exe ffplay.exe dist/ 2>/dev/null || true
+          # FFmpeg 自己生成的 dll 就构建在仓库根
+          cp -f libavcodec/*.dll libavformat/*.dll libavutil/*.dll libavfilter/*.dll libswscale/*.dll libswresample/*.dll libavdevice/*.dll libpostproc/*.dll dist/ 2>/dev/null || true
+          # 收集 exe 依赖的其它 mingw dll（供运行时）
           for exe in ffmpeg ffprobe ffplay; do
-            ldd "$exe.exe" 2>/dev/null | grep -iE 'mingw64|msys64' | awk '{print $3}' | while read dll; do
-              if [ -n "$dll" ] && [ -f "$dll" ]; then
-                cp -f "$dll" dist/
-                echo "copied: $dll"
+            ldd "$exe.exe" 2>/dev/null | awk '{print $3}' | while read dll; do
+              if [ -n "$dll" ] && [ -f "$dll" ] && [[ "$dll" = *.dll ]]; then
+                cp -f "$dll" dist/ 2>/dev/null || true
               fi
             done
           done
           echo "=== dist contents ==="
-          ls -la dist/ || true
+          ls -la dist/
           find dist -name "*.dll" | wc -l | xargs echo "dll count:"
 
       - name: Package zip (PowerShell)
