@@ -5,6 +5,9 @@ on:
   push:
     branches: [master]
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: windows-latest
@@ -19,6 +22,7 @@ jobs:
         with:
           msystem: MINGW64
           update: false
+          cache: false
           install: >-
             base-devel
             mingw-w64-x86_64-gcc
