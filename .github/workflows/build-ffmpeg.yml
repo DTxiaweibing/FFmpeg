@@ -1,0 +1,100 @@
+name: Build FFmpeg for Windows
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          version: latest
+          msystem: MINGW64
+          update: false
+          install: >-
+            base-devel
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-binutils
+            mingw-w64-x86_64-nasm
+            mingw-w64-x86_64-yasm
+            mingw-w64-x86_64-pkgconf
+            mingw-w64-x86_64-zlib
+            mingw-w64-x86_64-bzip2
+            mingw-w64-x86_64-xz
+            mingw-w64-x86_64-x264
+            mingw-w64-x86_64-x265
+            mingw-w64-x86_64-libvpx
+            mingw-w64-x86_64-opus
+            mingw-w64-x86_64-libvorbis
+            mingw-w64-x86_64-libtheora
+            mingw-w64-x86_64-libmp3lame
+            mingw-w64-x86_64-freetype
+            mingw-w64-x86_64-fontconfig
+            mingw-w64-x86_64-libass
+            mingw-w64-x86_64-fribidi
+            mingw-w64-x86_64-harfbuzz
+            mingw-w64-x86_64-SDL2
+
+      - name: Pull latest submodules
+        run: git submodule update --init --recursive || true
+
+      - name: Configure FFmpeg
+        run: |
+          ./configure \
+            --prefix=$MSYSTEM_PREFIX \
+            --enable-gpl \
+            --enable-libx264 \
+            --enable-libx265 \
+            --enable-libvpx \
+            --enable-libmp3lame \
+            --enable-libopus \
+            --enable-libvorbis \
+            --enable-libtheora \
+            --enable-libfreetype \
+            --enable-libfontconfig \
+            --enable-libfribidi \
+            --enable-libharfbuzz \
+            --enable-libass \
+            --enable-sdl2 \
+            --enable-ffplay \
+            --disable-debug
+
+      - name: Build
+        run: |
+          make -j$(nproc)
+          make install && echo "build-installed"
+
+      - name: Package exes (PowerShell)
+        shell: powershell
+        run: |
+          $ver = git rev-parse --short HEAD
+          $zip = "ffmpeg-windows-${ver}.zip"
+          $files = @("$env:GITHUB_WORKSPACE\ffmpeg.exe", "$env:GITHUB_WORKSPACE\ffprobe.exe", "$env:GITHUB_WORKSPACE\ffplay.exe")
+          Get-Item $files | ForEach-Object { Write-Output "packing: $($_.FullName) ($($_.Length) bytes)" }
+          Compress-Archive -Path $files -DestinationPath "$env:GITHUB_WORKSPACE\$zip" -Force
+          Write-Output "ZIP=$env:GITHUB_WORKSPACE\$zip"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ffmpeg-windows
+          path: |
+            ffmpeg.exe
+            ffprobe.exe
+            ffplay.exe
+          if-no-files-found: error
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_id }}
+          files: ffmpeg-*.zip
