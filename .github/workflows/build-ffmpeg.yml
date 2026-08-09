@@ -39,7 +39,7 @@ jobs:
             mingw-w64-x86_64-opus
             mingw-w64-x86_64-libvorbis
             mingw-w64-x86_64-libtheora
-            mingw-w64-x86_64-libmp3lame
+            mingw-w64-x86_64-lame
             mingw-w64-x86_64-freetype
             mingw-w64-x86_64-fontconfig
             mingw-w64-x86_64-libass
