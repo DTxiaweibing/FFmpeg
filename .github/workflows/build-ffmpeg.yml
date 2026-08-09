@@ -54,6 +54,8 @@ jobs:
         run: |
           ./configure \
             --prefix=$MSYSTEM_PREFIX \
+            --disable-shared \
+            --enable-static \
             --enable-gpl \
             --enable-libx264 \
             --enable-libx265 \
