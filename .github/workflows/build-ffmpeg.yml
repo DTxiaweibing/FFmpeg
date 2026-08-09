@@ -54,9 +54,6 @@ jobs:
         run: |
           ./configure \
             --prefix=$MSYSTEM_PREFIX \
-            --disable-shared \
-            --enable-static \
-            --extra-ldflags="-static" \
             --enable-gpl \
             --enable-libx264 \
             --enable-libx265 \
@@ -79,31 +76,36 @@ jobs:
           make -j$(nproc)
           make install && echo "build-installed"
 
-      - name: Package exes (PowerShell)
-        shell: powershell
+      - name: Package with dependency DLLs
+        shell: bash
         run: |
-          $ver = git rev-parse --short HEAD
-          $zip = "ffmpeg-windows-${ver}.zip"
-          $files = @("$env:GITHUB_WORKSPACE\ffmpeg.exe", "$env:GITHUB_WORKSPACE\ffprobe.exe", "$env:GITHUB_WORKSPACE\ffplay.exe")
-          $dlls = Get-ChildItem "$env:GITHUB_WORKSPACE" -Filter "*.dll" -ErrorAction SilentlyContinue
-          foreach ($dll in $dlls) { $files += $dll.FullName }
-          Get-Item $files | ForEach-Object { Write-Output "packing: $($_.FullName) ($($_.Length) bytes)" }
-          Compress-Archive -Path $files -DestinationPath "$env:GITHUB_WORKSPACE\$zip" -Force
-          Write-Output "ZIP=$env:GITHUB_WORKSPACE\$zip"
+          set -e
+          ver=$(cd "$GITHUB_WORKSPACE" && git rev-parse --short HEAD)
+          cd "$GITHUB_WORKSPACE"
+          rm -rf dist
+          mkdir -p dist
+          cp -v ffmpeg.exe ffprobe.exe ffplay.exe dist/
+          for exe in ffmpeg ffprobe ffplay; do
+            ldd "$exe.exe" 2>/dev/null | grep -i 'mingw64' | awk '{print $3}' | while read dll; do
+              if [ -n "$dll" ] && [ -f "$dll" ]; then cp -v "$dll" dist/; fi
+            done
+          done
+          cd dist
+          echo "=== dist contents ==="
+          ls -la
+          /mingw64/bin/zip -r "../ffmpeg-windows-${ver}.zip" .
+          cd ..
+          ls -la "$GITHUB_WORKSPACE/ffmpeg-windows-${ver}.zip"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ffmpeg-windows
-          path: |
-            ffmpeg.exe
-            ffprobe.exe
-            ffplay.exe
-            *.dll
+          path: dist/
           if-no-files-found: error
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_id }}
-          files: ffmpeg-*.zip
+          files: ffmpeg-windows-*.zip
