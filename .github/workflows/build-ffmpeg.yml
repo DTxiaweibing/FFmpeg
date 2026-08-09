@@ -76,26 +76,37 @@ jobs:
           make -j$(nproc)
           make install && echo "build-installed"
 
-      - name: Package with dependency DLLs
+      - name: Collect exes and dependency DLLs
         shell: bash
         run: |
           set -e
-          ver=$(cd "$GITHUB_WORKSPACE" && git rev-parse --short HEAD)
           cd "$GITHUB_WORKSPACE"
           rm -rf dist
           mkdir -p dist
-          cp -v ffmpeg.exe ffprobe.exe ffplay.exe dist/
+          cp -f ffmpeg.exe ffprobe.exe ffplay.exe dist/ 2>/dev/null || true
           for exe in ffmpeg ffprobe ffplay; do
-            ldd "$exe.exe" 2>/dev/null | grep -i 'mingw64' | awk '{print $3}' | while read dll; do
-              if [ -n "$dll" ] && [ -f "$dll" ]; then cp -v "$dll" dist/; fi
+            ldd "$exe.exe" 2>/dev/null | grep -iE 'mingw64|msys64' | awk '{print $3}' | while read dll; do
+              if [ -n "$dll" ] && [ -f "$dll" ]; then
+                cp -f "$dll" dist/
+                echo "copied: $dll"
+              fi
             done
           done
-          cd dist
           echo "=== dist contents ==="
-          ls -la
-          /mingw64/bin/zip -r "../ffmpeg-windows-${ver}.zip" .
-          cd ..
-          ls -la "$GITHUB_WORKSPACE/ffmpeg-windows-${ver}.zip"
+          ls -la dist/ || true
+          find dist -name "*.dll" | wc -l | xargs echo "dll count:"
+
+      - name: Package zip (PowerShell)
+        shell: powershell
+        run: |
+          $ver = "${{ github.sha }}".Substring(0,7)
+          $dist = "$env:GITHUB_WORKSPACE\dist"
+          $zip = "$env:GITHUB_WORKSPACE\ffmpeg-windows-$ver.zip"
+          if (-not (Test-Path "$dist\ffmpeg.exe")) { throw "ffmpeg.exe missing in dist" }
+          Get-ChildItem $dist | ForEach-Object { Write-Output "zip-in: $($_.Name) ($($_.Length) bytes)" }
+          Compress-Archive -Path "$dist\*" -DestinationPath $zip -Force
+          Write-Output "ZIP=$zip"
+          Write-Output ("zip size: " + [math]::Round((Get-Item $zip).Length/1MB,1) + " MB")
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
